@@ -74,6 +74,7 @@ typedef bool (*WebservConvCallback)(WebserveConv * conversation);
 // Run the server
 Webserve * start_server(int port);
 bool poll_once(Webserve * webserve);
+bool poll_thrice(Webserve * webserve);
 void poll_forever(Webserve * webserve);
 void finish_server(Webserve * webserve);
 

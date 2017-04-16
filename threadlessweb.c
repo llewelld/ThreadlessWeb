@@ -308,6 +308,15 @@ void poll_forever(Webserve * webserve) {
 	}
 }
 
+bool poll_thrice(Webserve * webserve) {
+	int count;
+	for (count = 0; (count < 3) && (webserve->quit != true); count++) {
+		webserve->quit |= poll_once(webserve);
+	}
+
+	return webserve->quit;
+}
+
 bool poll_once(Webserve * webserve) {
 	struct timeval timeout;
 	int i;
@@ -371,7 +380,7 @@ bool poll_once(Webserve * webserve) {
 		}
 	}
 	
-	return false;
+	return webserve->quit;
 }
 
 void conversation_new (Webserve * webserve, int fd) {
