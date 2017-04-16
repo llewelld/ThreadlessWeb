@@ -38,9 +38,8 @@
 // Defines
 
 #define VERSION 23
-#define ERROR      42
-#define LOG        44
-#define FORBIDDEN 403
+#define RESPONSE_ERROR      42
+#define RESPONSE_FORBIDDEN 403
 
 // Structure definitions
 

@@ -45,6 +45,13 @@
 #define FORBIDDEN_TEXT "HTTP/1.1 403 Forbidden\nContent-Length: 185\nConnection: close\nContent-Type: text/html\n\n<html><head>\n<title>403 Forbidden</title>\n</head><body>\n<h1>Forbidden</h1>\nThe requested URL, file type or operation is not allowed on this simple static file webserver.\n</body></html>\n"
 #define FORBIDDEN_TEXT_LENGTH sizeof(FORBIDDEN_TEXT)
 
+#if defined(_WIN32) || defined(_WIN64)
+#define LOG(level_, ...) printf(__VA_ARGS__);
+#else
+#include <syslog.h>
+#define LOG(level_, ...) syslog((level_), __VA_ARGS__)
+#endif
+
 // Structure definitions
 
 static char const * const requests[] = {
@@ -98,7 +105,7 @@ void web_read(int fd, WebserveConv * conversation) {
 	ret = read(fd, buffer, BUFSIZE);
 	if (ret == 0 || ret == -1) {	/* read failure stop now */
 		forbidden(fd);
-		printf("FORBIDDEN: Failed to read browser request, %d\n", fd);
+		LOG(LOG_WARNING, "FORBIDDEN: Failed to read browser request, %d\n", fd);
 		exit(3);
 	}
 
@@ -152,7 +159,7 @@ void web_read(int fd, WebserveConv * conversation) {
 			buffer[i]='*';
 		}
 	}
-	printf("INFO: Request %d: %s\n", hit, buffer);
+	LOG(LOG_INFO, "Request %d: %s\n", hit, buffer);
 
 	// Figure out what sort of request this is (GET, POST?)
 	type = REQUEST_INVALID;
@@ -172,7 +179,7 @@ void web_read(int fd, WebserveConv * conversation) {
 	// Not all HTTP operations are supported
 	if ((type <= REQUEST_INVALID) || (type >= REQUEST_NUM)) {
 		forbidden(fd);
-		printf("FORBIDDEN: Operation not supported: %s: %d\n", buffer, fd);
+		LOG(LOG_WARNING, "FORBIDDEN: Operation not supported: %s: %d\n", buffer, fd);
 		exit(3);
 	}
 	// null terminate after the second space to ignore extra stuff
@@ -209,20 +216,20 @@ void web_write(int fd, WebserveConv * conversation) {
 	written = write(fd, content, length);
 
 	if (written < 0) {
-		printf("ERROR: Write\n");
+		LOG(LOG_ERR, "ERROR: Write\n");
 	}
 
 	// Allow socket to drain before signalling the socket is closed
 	//sleep(1);
 	close(fd);
-	printf("INFO: Request %d closed\n", hit);
+	LOG(LOG_INFO, "INFO: Request %d closed\n", hit);
 }
 
 void forbidden(int socket_fd) {
 	int written;
 
 	written = write(socket_fd, FORBIDDEN_TEXT, FORBIDDEN_TEXT_LENGTH);
-	printf("INFO: Forbidden, wrote response size %d\n", written);
+	LOG(LOG_INFO, "INFO: Forbidden, wrote response size %d\n", written);
 }
 
 void set_timeout_usec(Webserve * webserve, unsigned int usec) {
@@ -242,12 +249,12 @@ Webserve * start_server(int port) {
 
 	// Setup the network socket
 	if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		printf("ERROR: System call socket\n");
+		LOG(LOG_ERR, "ERROR: System call socket\n");
 		exit(3);
 	}
 
 	if (port < 0 || port > 60000) {
-		printf("ERROR: Invalid port number (try 1->60000): %d\n", port);
+		LOG(LOG_ERR, "ERROR: Invalid port number (try 1->60000): %d\n", port);
 		exit(3);
 	}
 
@@ -257,13 +264,13 @@ Webserve * start_server(int port) {
 	serv_addr.sin_port = htons(port);
 
 	if (bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-		printf("ERROR: System call: bind\n");
+		LOG(LOG_ERR, "ERROR: System call: bind\n");
 		exit(3);
 	}
 
 	// Listen for connections
 	if (listen(listenfd, 64) <0 ) {
-		printf("ERROR: System call: listen\n");
+		LOG(LOG_ERR, "ERROR: System call: listen\n");
 		exit(3);
 	}
 
@@ -333,7 +340,7 @@ bool poll_once(Webserve * webserve) {
 	read_fd_set = webserve->active_read_fd_set;
 	write_fd_set = webserve->active_write_fd_set;
 	if (select(FD_SETSIZE, &read_fd_set, &write_fd_set, NULL, &timeout) < 0) {
-		printf("ERROR: Select\n");
+		LOG(LOG_ERR, "ERROR: Select\n");
 		webserve->quit = true;
 	}
 
@@ -345,11 +352,11 @@ bool poll_once(Webserve * webserve) {
 				size = sizeof (clientname);
 				fd = accept (i, (struct sockaddr *) &clientname, &size);
 				if (fd < 0) {
-					printf("ERROR: Accept\n");
+					LOG(LOG_ERR, "ERROR: Accept\n");
 					exit (EXIT_FAILURE);
 				}
 				webserve->hit++;
-				printf("INFO: Request %d connection from %s\n", webserve->hit, inet_ntoa(clientname.sin_addr));
+				LOG(LOG_INFO, "INFO: Request %d connection from %s\n", webserve->hit, inet_ntoa(clientname.sin_addr));
 				FD_SET (fd, &webserve->active_read_fd_set);
 
 				// Start a conversation
@@ -402,7 +409,7 @@ void conversation_new (Webserve * webserve, int fd) {
 		// Create the new conversation structure
 		webserve->conversation[fd] = calloc(sizeof(WebserveConv), 1);
 		webserve->conversation[fd]->hit = webserve->hit;
-		webserve->conversation[fd]->type = ERROR;
+		webserve->conversation[fd]->type = RESPONSE_ERROR;
 	}
 }
 
